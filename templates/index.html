@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Todo App — Clean & Modern</title>
+
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="header">
+      <div>
+        <h1>Todo App</h1>
+        <p class="subtitle">Simples. Rápido. Feito em Go — bora cumprir tudo hoje!</p>
+      </div>
+      <div class="stats" id="stats">0 tarefas</div>
+    </header>
+
+    <section class="card">
+      <form id="addForm" class="add-form" action="/add" method="POST" autocomplete="off">
+        <input id="titleInput" name="title" type="text" placeholder="Adicionar nova tarefa..." required maxlength="120" />
+        <button type="submit" class="btn-primary">Adicionar</button>
+      </form>
+
+      <ul class="task-list" id="taskList">
+        {{range .}}
+        <li class="task-item" data-title="{{.Title}}">
+          <button class="btn-check" aria-label="Marcar como feita">
+            <svg width="14" height="14" viewBox="0 0 24 24" class="icon-check" aria-hidden>
+              <path d="M20.285 6.709a1 1 0 0 0-1.57-1.272L9 15.151l-3.715-3.715a1 1 0 1 0-1.414 1.414l4.422 4.421a1 1 0 0 0 1.414 0l10.578-10.578z"/>
+            </svg>
+          </button>
+
+          <span class="task-title">{{.Title}}</span>
+
+          <div class="task-actions">
+            <button class="btn-icon btn-delete" aria-label="Deletar">
+              <svg width="16" height="16" viewBox="0 0 24 24" class="icon-trash" aria-hidden>
+                <path d="M9 3v1H4v2h16V4h-5V3H9zm1 6v8h2V9h-2zm4 0v8h2V9h-2zM7 9v8h2V9H7z"/>
+              </svg>
+            </button>
+          </div>
+        </li>
+        {{else}}
+        <li class="empty">Nenhuma tarefa ainda — adiciona uma pra começar 🚀</li>
+        {{end}}
+      </ul>
+    </section>
+
+    <footer class="footer">
+      <small>Feito por você + Go • Reinicie o servidor para resetar (dados em memória)</small>
+    </footer>
+  </main>
+
+  <script>
+    // Frontend interactivity: adiciona via fetch para /add (funciona com o handler Go que você tem).
+    // Marcar como feita e excluir são ações locais (UI). Posso adicionar endpoints no backend se quiser persistir.
+    (function () {
+      const form = document.getElementById('addForm');
+      const input = document.getElementById('titleInput');
+      const list = document.getElementById('taskList');
+      const stats = document.getElementById('stats');
+
+      function updateStats() {
+        const total = list.querySelectorAll('.task-item').length;
+        const done = list.querySelectorAll('.task-item.done').length;
+        stats.textContent = `${total} tarefa${total !== 1 ? 's' : ''} • ${done} concluída${done !== 1 ? 's' : ''}`;
+      }
+
+      // Handle submit: send to server and append to DOM on success
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const title = input.value.trim();
+        if (!title) return;
+        try {
+          // Send form data to /add (backend Go existing)
+          const fd = new FormData();
+          fd.append('title', title);
+          const res = await fetch(form.action, { method: 'POST', body: fd });
+          // On redirect response, treat as success
+          if (res.ok || res.type === 'opaqueredirect' || res.status === 303 || res.status === 200) {
+            appendTask(title);
+            input.value = '';
+            input.focus();
+            updateStats();
+          } else {
+            // fallback: still append locally
+            appendTask(title);
+            input.value = '';
+            updateStats();
+          }
+        } catch (err) {
+          // offline or fetch failed -> still add locally
+          appendTask(title);
+          input.value = '';
+          updateStats();
+        }
+      });
+
+      function appendTask(title) {
+        // create li using same structure as template
+        const li = document.createElement('li');
+        li.className = 'task-item';
+        li.setAttribute('data-title', title);
+
+        li.innerHTML = `
+          <button class="btn-check" aria-label="Marcar como feita">
+            <svg width="14" height="14" viewBox="0 0 24 24" class="icon-check" aria-hidden>
+              <path d="M20.285 6.709a1 1 0 0 0-1.57-1.272L9 15.151l-3.715-3.715a1 1 0 1 0-1.414 1.414l4.422 4.421a1 1 0 0 0 1.414 0l10.578-10.578z"/>
+            </svg>
+          </button>
+          <span class="task-title"></span>
+          <div class="task-actions">
+            <button class="btn-icon btn-delete" aria-label="Deletar">
+              <svg width="16" height="16" viewBox="0 0 24 24" class="icon-trash" aria-hidden>
+                <path d="M9 3v1H4v2h16V4h-5V3H9zm1 6v8h2V9h-2zm4 0v8h2V9h-2zM7 9v8h2V9H7z"/>
+              </svg>
+            </button>
+          </div>
+        `;
+        li.querySelector('.task-title').textContent = title;
+        bindItemEvents(li);
+        // prefer to insert at top
+        if (list.querySelector('.empty')) list.innerHTML = '';
+        list.prepend(li);
+      }
+
+      function bindItemEvents(li) {
+        const btnCheck = li.querySelector('.btn-check');
+        const btnDelete = li.querySelector('.btn-delete');
+
+        btnCheck.addEventListener('click', () => {
+          li.classList.toggle('done');
+          // animação visual, persistência opcional
+          updateStats();
+        });
+
+        btnDelete.addEventListener('click', () => {
+          li.classList.add('removing');
+          li.addEventListener('transitionend', () => {
+            li.remove();
+            if (!list.querySelector('.task-item')) {
+              list.innerHTML = '<li class="empty">Nenhuma tarefa ainda — adiciona uma pra começar 🚀</li>';
+            }
+            updateStats();
+          }, { once: true });
+        });
+      }
+
+      // bind existing items from server render
+      Array.from(list.querySelectorAll('.task-item')).forEach(bindItemEvents);
+      updateStats();
+    })();
+  </script>
+</body>
+</html>
